@@ -1,34 +1,20 @@
-import json
+import datetime
 import logging
-
 
 import aiogram.utils.markdown as md
 from aiogram import Bot, Dispatcher, types
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher import FSMContext
-from aiogram.types import ParseMode, KeyboardButton, ReplyKeyboardMarkup
+from aiogram.types import ParseMode
 from aiogram.utils import executor
 
 from api.WeatherApi import getWeather
+from entities.TempList import TempList
 from states.WeatherState import WeatherState
 
 from keyboards import GREET_KEYBOARD, weather_start_message, news_start_message, notes_start_message, WEATHER_DATES
 
 import matplotlib.pyplot as plt
-
-# x_values = ['1', '2', '3', '4', '5']
-# y_values = [3, 10, 20, 8, 6]
-#
-# # Строим график
-# plt.plot(x_values, y_values, color='black')
-#
-# # Добавляем заголовок и метки осей
-# plt.title("Динамика температуры")
-# plt.xlabel("temp °C")
-# plt.ylabel("Дни")
-#
-# # Сохраняем график в файл
-# plt.savefig('my_plot.png')
 
 logging.basicConfig(level=logging.INFO)
 
@@ -91,37 +77,56 @@ async def process_city(message: types.Message, state: FSMContext):
 
 @dp.message_handler(lambda message: message.text.isdigit(), state=WeatherState.days)
 async def process_city(message: types.Message, state: FSMContext):
-    messageText = message.text
-    await state.update_data(days=int(messageText))
+    await state.update_data(days=int(message.text))
+    
     weatherInfo = await state.get_data()
-
 
     res = await getWeather(weatherInfo.get('city'))
 
-    list = res['list'][0]
+    tList = TempList(res['list'])
 
-    mainStr = list['main']
-    temp = mainStr['temp']
-    feelsLike = mainStr['feels_like']
+    if weatherInfo.get('days') == 1:
+        date = tList.getFirstDate()
 
-    weather = list['weather'][0]
-    weatherDescription = weather['description']
+        await bot.send_message(
+            message.chat.id,
+            md.text(
+                md.text(f"Температура в данный момент {date.temp}, но {date.description}, поэтому ощущается как {date.feelsLike}"),
+                sep='\n',
+            ),
+            parse_mode=ParseMode.MARKDOWN,
+        )
+    else:
+        datesList = None
+        
 
-    # TODO Сделать функцию по построеню графика
-    # await bot.send_photo(
-    #     message.chat.id,
-    #     photo=open("my_plot.png", 'rb')
-    # )
+        if weatherInfo.get('days') == 2:
+            datesList = tList.omitTodayFromList()
+            # today = datetime.date.today()
+            # fromDate = today + datetime.timedelta(days = 1)
+            # toDate = today + datetime.timedelta(days = 2)
+            # print(fromDate)
+            # print(toDate)
+            # datesList = tList.getRangeDates(fromDate, toDate)
+        else: 
+            datesList = tList.omitTodayFromList()
 
-    await bot.send_message(
-        message.chat.id,
-        md.text(
-            md.text(f"Температура в данный момент {temp}, но {weatherDescription}, поэтому ощущается как {feelsLike}"),
-            sep='\n',
-        ),
-        parse_mode=ParseMode.MARKDOWN,
-    )
+        chartInfo  = tList.plotData(datesList)
 
+        ax = plt.axes()
+        ax.set_xticklabels(chartInfo['labels'])
+        plt.plot(chartInfo['x'], chartInfo['y'], color='black')
+
+        plt.title("Динамика температуры")
+        plt.xlabel("Дни")
+        plt.ylabel("temp °C")
+
+        plt.savefig('my_plot.png')
+
+        await bot.send_photo(
+            message.chat.id,
+            photo=open("my_plot.png", 'rb')
+        )
 
 @dp.message_handler(lambda message: not message.text.isdigit(), state=WeatherState.days)
 async def process_days(message: types.Message):
