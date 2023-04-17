@@ -75,6 +75,7 @@ async def process_city(message: types.Message, state: FSMContext):
 
     await message.reply("Количество дней для погоды?", reply_markup=WEATHER_DATES())
 
+# TODO bug with chart if select buttons when chart is created
 @dp.message_handler(lambda message: message.text.isdigit(), state=WeatherState.days)
 async def process_city(message: types.Message, state: FSMContext):
     await state.update_data(days=int(message.text))
@@ -98,16 +99,12 @@ async def process_city(message: types.Message, state: FSMContext):
         )
     else:
         datesList = None
-        
 
         if weatherInfo.get('days') == 2:
-            datesList = tList.omitTodayFromList()
-            # today = datetime.date.today()
-            # fromDate = today + datetime.timedelta(days = 1)
-            # toDate = today + datetime.timedelta(days = 2)
-            # print(fromDate)
-            # print(toDate)
-            # datesList = tList.getRangeDates(fromDate, toDate)
+            today = datetime.date.today()
+            fromDate = today + datetime.timedelta(days = 1)
+            toDate = today + datetime.timedelta(days = 2)
+            datesList = tList.getRangeDates(fromDate, toDate)
         else: 
             datesList = tList.omitTodayFromList()
 

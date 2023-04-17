@@ -50,11 +50,11 @@ class TempList:
 
     def getRangeDates(self, fromRange, toRange):
         def my_filter(item: TempRecord):
-            itemDate = datetime.strptime(
+            itemDateString = datetime.strptime(
                 item.date, "%Y-%m-%d %H:%M:%S").strftime("%Y-%m-%d")
+            itemDate = datetime.strptime(itemDateString, "%Y-%m-%d").date()
 
-            return datetime.strptime(fromRange, "%Y-%m-%d").date()
-            # <= itemDate <= datetime.strptime(toRange, "%Y-%m-%d").date()
+            return fromRange <= itemDate <= toRange
 
         return list(deepcopy(filter(my_filter, self.dates)))
 
