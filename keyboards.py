@@ -18,7 +18,6 @@ def GREET_KEYBOARD():
 
 def WEATHER_DATES():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, selective=True)
-    markup.add("1", "3", "7")
+    markup.add("1", "2", "4")
 
     return markup
-
