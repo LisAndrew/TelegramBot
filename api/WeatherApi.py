@@ -4,7 +4,7 @@ async def getWeather(city):
     async with aiohttp.ClientSession() as session:
         query = {
             'q': city,
-            'appid': 'a3993f31ef3974d66a2454e5c9bd9590',
+            'appid': 'token',
             'lang': 'ru',
             'cnt': 40,
             'units': 'metric'

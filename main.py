@@ -10,20 +10,23 @@ from aiogram.utils import executor
 
 from api.WeatherApi import getWeather
 from entities.TempList import TempList
+from states.NotesState import NotesState
 from states.WeatherState import WeatherState
 
-from keyboards import GREET_KEYBOARD, weather_start_message, news_start_message, notes_start_message, WEATHER_DATES
+from keyboards import GREET_KEYBOARD, weather_start_message, news_start_message, notes_start_message, WEATHER_DATES, \
+    WELCOME_KEYBOARD_NOTES, add_notes, list_notes
 
 import matplotlib.pyplot as plt
 
 logging.basicConfig(level=logging.INFO)
 
-API_TOKEN = '5769100992:AAF7kcWJyc15w7Y32_JKK6LfbJ-Ew1-uexc'
+API_TOKEN = 'token'
 
 bot = Bot(token=API_TOKEN)
 
 storage = MemoryStorage()
 dp = Dispatcher(bot, storage=storage)
+
 
 @dp.message_handler(commands='start')
 async def cmd_start(message: types.Message):
@@ -47,16 +50,19 @@ async def cmd_start(message: types.Message):
                 'Я отправлю тебе свежие новости'), '!'),
 
             md.text('🍺 Постоянно забываешь что нужно купить в магазине?', md.bold(
-                'Я могу сохранять твои заметки и ты точно не забудешь какое пиво тебя попросили купить на субботнюю вечеринку'), '!'),
+                'Я могу сохранять твои заметки и ты точно не забудешь какое пиво тебя попросили купить на субботнюю вечеринку'),
+                    '!'),
 
-            md.text('🤟', md.bold('Функционал доступен по кнопкам ниже, поэтому не заблудишься'), '.', md.bold('Удачи, друг'), '!'),
+            md.text('🤟', md.bold('Функционал доступен по кнопкам ниже, поэтому не заблудишься'), '.',
+                    md.bold('Удачи, друг'), '!'),
 
             sep='\n\n',
         ),
 
-        reply_markup = GREET_KEYBOARD(),
-        parse_mode = ParseMode.MARKDOWN,
+        reply_markup=GREET_KEYBOARD(),
+        parse_mode=ParseMode.MARKDOWN,
     )
+
 
 @dp.message_handler(text=[weather_start_message, news_start_message, notes_start_message])
 async def process_commands(message: types.Message):
@@ -65,6 +71,11 @@ async def process_commands(message: types.Message):
     if message.text == weather_start_message:
         await WeatherState.city.set()
         await bot.send_message(message.chat.id, "Введите ваш город")
+
+    if message.text == notes_start_message:
+        await NotesState.welcome.set()
+        await message.reply("Выбери действие ", reply_markup=WELCOME_KEYBOARD_NOTES())
+
 
 @dp.message_handler(state=WeatherState.city)
 async def process_city(message: types.Message, state: FSMContext):
@@ -75,11 +86,41 @@ async def process_city(message: types.Message, state: FSMContext):
 
     await message.reply("Количество дней для погоды?", reply_markup=WEATHER_DATES())
 
-# TODO bug with chart if select buttons when chart is created
+
+@dp.message_handler(state=NotesState.welcome)
+async def process_welcome(message: types.Message, state: FSMContext):
+    if message.text == add_notes:
+        await NotesState.add.set()
+        return await message.reply("Напиши заметки")
+    if message.text == list_notes:
+        await NotesState.list.set()
+        return await message.reply("Держи список заметок")
+
+
+@dp.message_handler(state=NotesState.add)
+async def process_add_notes(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    dataList = data.get('notesList')
+    if dataList is None:
+       dataList = []
+    dataList.append(message.text)
+
+    await state.update_data(notesList=dataList)
+    await message.reply(f"Заметка добавлена {message.text}")
+    await NotesState.welcome.set()
+
+
+@dp.message_handler(state=NotesState.list)
+async def process_list_check(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    dataList = data.get('notesList')
+    await message.reply(f"Список всех заметок {dataList}")
+
+
 @dp.message_handler(lambda message: message.text.isdigit(), state=WeatherState.days)
 async def process_city(message: types.Message, state: FSMContext):
     await state.update_data(days=int(message.text))
-    
+
     weatherInfo = await state.get_data()
 
     res = await getWeather(weatherInfo.get('city'))
@@ -92,7 +133,8 @@ async def process_city(message: types.Message, state: FSMContext):
         await bot.send_message(
             message.chat.id,
             md.text(
-                md.text(f"Температура в данный момент {date.temp}, но {date.description}, поэтому ощущается как {date.feelsLike}"),
+                md.text(
+                    f"Температура в данный момент {date.temp}, но {date.description}, поэтому ощущается как {date.feelsLike}"),
                 sep='\n',
             ),
             parse_mode=ParseMode.MARKDOWN,
@@ -102,13 +144,13 @@ async def process_city(message: types.Message, state: FSMContext):
 
         if weatherInfo.get('days') == 2:
             today = datetime.date.today()
-            fromDate = today + datetime.timedelta(days = 1)
-            toDate = today + datetime.timedelta(days = 2)
+            fromDate = today + datetime.timedelta(days=1)
+            toDate = today + datetime.timedelta(days=2)
             datesList = tList.getRangeDates(fromDate, toDate)
-        else: 
+        else:
             datesList = tList.omitTodayFromList()
 
-        chartInfo  = tList.plotData(datesList)
+        chartInfo = tList.plotData(datesList)
 
         ax = plt.axes()
         ax.set_xticklabels(chartInfo['labels'])
@@ -125,9 +167,11 @@ async def process_city(message: types.Message, state: FSMContext):
             photo=open("my_plot.png", 'rb')
         )
 
+
 @dp.message_handler(lambda message: not message.text.isdigit(), state=WeatherState.days)
 async def process_days(message: types.Message):
     return await message.reply("Нужно ввести число, друг")
+
 
 if __name__ == '__main__':
     executor.start_polling(dp, skip_updates=True)
