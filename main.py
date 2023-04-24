@@ -46,9 +46,6 @@ async def cmd_start(message: types.Message):
             md.text('🌡️ Хочешь узнать погоду на сегодня или другой промежуток дней?', md.bold(
                 'Просто укажи город и дни. Я посоветую тебе как одеться, чтобы не заболеть'), '!'),
 
-            md.text('📰 Хочешь узнать что случилось в мире пока ты спал?', md.bold(
-                'Я отправлю тебе свежие новости'), '!'),
-
             md.text('🍺 Постоянно забываешь что нужно купить в магазине?', md.bold(
                 'Я могу сохранять твои заметки и ты точно не забудешь какое пиво тебя попросили купить на субботнюю вечеринку'),
                     '!'),
@@ -66,11 +63,11 @@ async def cmd_start(message: types.Message):
 
 @dp.message_handler(text=[weather_start_message, news_start_message, notes_start_message])
 async def process_commands(message: types.Message):
-    messageText = message.text;
+    messageText = message.text
 
     if message.text == weather_start_message:
         await WeatherState.city.set()
-        await bot.send_message(message.chat.id, "Введите ваш город")
+        await bot.send_message(message.chat.id, "Введите ваш город", reply_markup=None)
 
     if message.text == notes_start_message:
         await NotesState.welcome.set()
@@ -87,34 +84,14 @@ async def process_city(message: types.Message, state: FSMContext):
     await message.reply("Количество дней для погоды?", reply_markup=WEATHER_DATES())
 
 
-@dp.message_handler(state=NotesState.welcome)
-async def process_welcome(message: types.Message, state: FSMContext):
-    if message.text == add_notes:
-        await NotesState.add.set()
-        return await message.reply("Напиши заметки")
-    if message.text == list_notes:
-        await NotesState.list.set()
-        return await message.reply("Держи список заметок")
+@dp.message_handler(lambda message: not message.text.isdigit())
+async def process_days(message: types.Message):
+    return await message.reply("Нужно ввести число, друг",reply_markup=WEATHER_DATES())
 
 
-@dp.message_handler(state=NotesState.add)
-async def process_add_notes(message: types.Message, state: FSMContext):
-    data = await state.get_data()
-    dataList = data.get('notesList')
-    if dataList is None:
-       dataList = []
-    dataList.append(message.text)
-
-    await state.update_data(notesList=dataList)
-    await message.reply(f"Заметка добавлена {message.text}")
-    await NotesState.welcome.set()
-
-
-@dp.message_handler(state=NotesState.list)
-async def process_list_check(message: types.Message, state: FSMContext):
-    data = await state.get_data()
-    dataList = data.get('notesList')
-    await message.reply(f"Список всех заметок {dataList}")
+@dp.message_handler(lambda message: int(message.text) not in [1,2,4] )
+async def process_city(message: types.Message):
+    await message.reply("Пожалуйста, введи значения, равные 1 / 2 / 4", reply_markup=WEATHER_DATES())
 
 
 @dp.message_handler(lambda message: message.text.isdigit(), state=WeatherState.days)
@@ -137,6 +114,7 @@ async def process_city(message: types.Message, state: FSMContext):
                     f"Температура в данный момент {date.temp}, но {date.description}, поэтому ощущается как {date.feelsLike}"),
                 sep='\n',
             ),
+            reply_markup=GREET_KEYBOARD(),
             parse_mode=ParseMode.MARKDOWN,
         )
     else:
@@ -164,14 +142,41 @@ async def process_city(message: types.Message, state: FSMContext):
 
         await bot.send_photo(
             message.chat.id,
-            photo=open("my_plot.png", 'rb')
+            photo=open("my_plot.png", 'rb'),
+            reply_markup=GREET_KEYBOARD()
         )
 
+    await state.finish()
 
-@dp.message_handler(lambda message: not message.text.isdigit(), state=WeatherState.days)
-async def process_days(message: types.Message):
-    return await message.reply("Нужно ввести число, друг")
 
+@dp.message_handler(state=NotesState.welcome)
+async def process_welcome(message: types.Message):
+    if message.text == add_notes:
+        await NotesState.add.set()
+        return await message.reply("Напиши заметки")
+    if message.text == list_notes:
+        await NotesState.list.set()
+        return await message.reply("Держи список заметок")
+    
+
+@dp.message_handler(state=NotesState.add)
+async def process_add_notes(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    dataList = data.get('notesList')
+    if dataList is None:
+       dataList = []
+    dataList.append(message.text)
+
+    await state.update_data(notesList=dataList)
+    await message.reply(f"Заметка добавлена {message.text}")
+    await NotesState.welcome.set()
+
+
+@dp.message_handler(state=NotesState.list)
+async def process_list_check(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    dataList = data.get('notesList')
+    await message.reply(f"Список всех заметок {dataList}")
 
 if __name__ == '__main__':
     executor.start_polling(dp, skip_updates=True)
