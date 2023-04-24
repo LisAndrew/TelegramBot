@@ -84,12 +84,12 @@ async def process_city(message: types.Message, state: FSMContext):
     await message.reply("Количество дней для погоды?", reply_markup=WEATHER_DATES())
 
 
-@dp.message_handler(lambda message: not message.text.isdigit())
+@dp.message_handler(lambda message: not message.text.isdigit(), state=WeatherState.days)
 async def process_days(message: types.Message):
     return await message.reply("Нужно ввести число, друг",reply_markup=WEATHER_DATES())
 
 
-@dp.message_handler(lambda message: int(message.text) not in [1,2,4] )
+@dp.message_handler(lambda message: int(message.text) not in [1,2,4], state=WeatherState.days)
 async def process_city(message: types.Message):
     await message.reply("Пожалуйста, введи значения, равные 1 / 2 / 4", reply_markup=WEATHER_DATES())
 
@@ -150,13 +150,53 @@ async def process_city(message: types.Message, state: FSMContext):
 
 
 @dp.message_handler(state=NotesState.welcome)
-async def process_welcome(message: types.Message):
+async def process_welcome(message: types.Message, state: FSMContext):
     if message.text == add_notes:
         await NotesState.add.set()
-        return await message.reply("Напиши заметки")
+        await message.reply("Напиши заметки")
     if message.text == list_notes:
         await NotesState.list.set()
-        return await message.reply("Держи список заметок")
+        await message.reply("Держи список заметок")
+
+        data = await state.get_data()
+        dataList = data.get('notesList')
+        currentNoteIndex = data.get('currentNoteIndex')
+        note = dataList[0]
+        builder = types.InlineKeyboardMarkup(row_width=3)
+
+
+        if (currentNoteIndex != 0):
+            note = dataList[currentNoteIndex]
+
+            builder.insert(types.InlineKeyboardButton(
+                text="<<",
+                callback_data="prev_note",
+                )
+            )
+
+        builder.add(types.InlineKeyboardButton(
+            text="Удалить заметку",
+            callback_data="remove_note",
+            )
+        )
+
+        if (len(dataList) > 1):
+            builder.insert(types.InlineKeyboardButton(
+                text=">>",
+                callback_data="next_note",
+                )
+            )
+
+        await message.answer(
+                md.text(
+                    md.text(
+                        note),
+                    sep='\n',
+                ),
+                reply_markup=builder,
+                parse_mode=ParseMode.MARKDOWN,
+        )
+
     
 
 @dp.message_handler(state=NotesState.add)
@@ -169,14 +209,154 @@ async def process_add_notes(message: types.Message, state: FSMContext):
 
     await state.update_data(notesList=dataList)
     await message.reply(f"Заметка добавлена {message.text}")
+    await state.update_data(currentNoteIndex=0)
+    await NotesState.welcome.set()
+
+# @dp.message_handler(state=NotesState.list)
+# async def process_list_check(message: types.Message, state: FSMContext):
+#     data = await state.get_data()
+#     dataList = data.get('notesList')
+#     currentNoteIndex = data.get('currentNoteIndex')
+#     note = dataList[0]
+#     builder = types.InlineKeyboardMarkup(row_width=3)
+
+
+#     if (currentNoteIndex != 0):
+#         note = dataList[currentNoteIndex]
+      
+#         builder.insert(types.InlineKeyboardButton(
+#             text="<<",
+#             callback_data="prev_note",
+#             )
+#         )
+
+#     builder.add(types.InlineKeyboardButton(
+#         text="Удалить заметку",
+#         callback_data="remove_note",
+#         )
+#     )
+    
+#     if (len(dataList) > 1):
+#         builder.insert(types.InlineKeyboardButton(
+#             text=">>",
+#             callback_data="next_note",
+#             )
+#         )
+
+#     await message.answer(
+#             md.text(
+#                 md.text(
+#                     note),
+#                 sep='\n',
+#             ),
+#             reply_markup=builder,
+#             parse_mode=ParseMode.MARKDOWN,
+#     )
+
+@dp.callback_query_handler(text="remove_note", state=NotesState.list)
+async def handleNextNote(callback: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    currentNoteIndex = data.get('currentNoteIndex')
+    currentNotes = data.get('notesList')
+    del currentNotes[currentNoteIndex]
+
+    await state.update_data(notesList=currentNotes)
+
+    await callback.message.answer("Удалено!")
+    await state.update_data(currentNoteIndex=0)
     await NotesState.welcome.set()
 
 
-@dp.message_handler(state=NotesState.list)
-async def process_list_check(message: types.Message, state: FSMContext):
+@dp.callback_query_handler(text="next_note", state=NotesState.list)
+async def handleNextNote(callback: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    currentNoteIndex = data.get('currentNoteIndex')
+    await state.update_data(currentNoteIndex=currentNoteIndex+1)
+   
     data = await state.get_data()
     dataList = data.get('notesList')
-    await message.reply(f"Список всех заметок {dataList}")
+    currentNoteIndex = data.get('currentNoteIndex')
+    note = dataList[currentNoteIndex]
+
+    builder = types.InlineKeyboardMarkup(row_width=4)
+
+    if (currentNoteIndex != 0):
+        builder.insert(types.InlineKeyboardButton(
+            text="<<",
+            callback_data="prev_note",
+            )
+        )
+
+    builder.add(types.InlineKeyboardButton(
+        text="Удалить заметку",
+        callback_data="remove_note",
+        )
+    )
+
+    if (len(dataList) > 1 and currentNoteIndex != len(dataList) - 1):
+        builder.insert(types.InlineKeyboardButton(
+            text=">>",
+            callback_data="next_note",
+            )
+        )
+
+
+    await callback.message.edit_text(
+            md.text(
+                md.text(
+                    note),
+                sep='\n',
+            ),
+            reply_markup=builder,
+            parse_mode=ParseMode.MARKDOWN,
+    )
+
+@dp.callback_query_handler(text="prev_note", state=NotesState.list)
+async def handleNextNote(callback: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    currentNoteIndex = data.get('currentNoteIndex')
+    await state.update_data(currentNoteIndex=currentNoteIndex-1)
+   
+    data = await state.get_data()
+    dataList = data.get('notesList')
+    currentNoteIndex = data.get('currentNoteIndex')
+
+    note = dataList[currentNoteIndex]
+
+    builder = types.InlineKeyboardMarkup(row_width=4)
+
+    if (currentNoteIndex != 0):
+        builder.insert(types.InlineKeyboardButton(
+            text="<<",
+            callback_data="prev_note",
+            )
+        )
+
+    builder.add(types.InlineKeyboardButton(
+        text="Удалить заметку",
+        callback_data="remove_note",
+        )
+    )
+
+    if (len(dataList) > 1 and currentNoteIndex != len(dataList) - 1):
+        builder.insert(types.InlineKeyboardButton(
+            text=">>",
+            callback_data="next_note",
+            )
+        )
+
+
+    await callback.message.edit_text(
+            md.text(
+                md.text(
+                    note),
+                sep='\n',
+            ),
+            reply_markup=builder,
+            parse_mode=ParseMode.MARKDOWN,
+    )
+
+
 
 if __name__ == '__main__':
     executor.start_polling(dp, skip_updates=True)
