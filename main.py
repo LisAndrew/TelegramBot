@@ -154,12 +154,25 @@ async def process_welcome(message: types.Message, state: FSMContext):
     if message.text == add_notes:
         await NotesState.add.set()
         await message.reply("Напиши текст заметки", reply_markup=None)
+    
     if message.text == list_notes:
+        data = await state.get_data()
+        dataList = data.get('notesList')
+
+        if (dataList == None):
+            return await message.answer(
+                md.text(
+                    md.text("Заметки еще не созданы!"),
+                    md.text("Ты что компьютер, что все помнишь? 🥸 "),
+                    sep="\n"
+                ),
+                reply_markup=WELCOME_KEYBOARD_NOTES(),
+                parse_mode=ParseMode.MARKDOWN,
+        )
+
         await NotesState.list.set()
         await message.reply("Держи список заметок")
 
-        data = await state.get_data()
-        dataList = data.get('notesList')
         currentNoteIndex = data.get('currentNoteIndex')
         note = dataList[0]
         builder = types.InlineKeyboardMarkup(row_width=3)
